@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { loadGraph } from "./graphState";
 import { getReadiness } from "@/lib/graph/readiness";
 import { propagateSchedule } from "@/lib/graph/propagation";
+import { computeCascadingRegressions } from "@/lib/graph/rollback";
 import { CreateTaskInput, UpdateTaskInput } from "@/lib/validations/task.schema";
 
 export async function listTasksWithReadiness() {
@@ -36,6 +37,11 @@ export async function updateTask(taskId: string, input: UpdateTaskInput) {
   const existing = await db.task.findUnique({ where: { id: taskId } });
   if (!existing) throw new Error("Task not found");
 
+  const isRegressionFromDone =
+    existing.status === "DONE" &&
+    input.status !== undefined &&
+    input.status !== "DONE";
+
   const datesChanged =
     (input.startDate !== undefined && input.startDate?.getTime() !== existing.startDate?.getTime()) ||
     (input.endDate !== undefined && input.endDate?.getTime() !== existing.endDate?.getTime()) ||
@@ -53,8 +59,22 @@ export async function updateTask(taskId: string, input: UpdateTaskInput) {
     },
   });
 
-  // Status changes (including regressions from DONE) need no extra write:
-  // readiness is derived fresh on every GET via getReadiness(). Nothing to persist.
+  // Readiness needs no extra write — it's derived fresh on every GET via
+  // getReadiness(). But status IS a stored field, and a task sitting in
+  // Done while its prerequisite chain is no longer satisfied shouldn't
+  // stay there silently. Cascade any downstream DONE tasks back to REVIEW.
+  if (isRegressionFromDone) {
+    const graph = await loadGraph(); // reflects the status write above
+    const cascadeIds = computeCascadingRegressions(graph, taskId);
+
+    if (cascadeIds.length > 0) {
+      await db.$transaction(
+        cascadeIds.map((id) =>
+          db.task.update({ where: { id }, data: { status: "REVIEW" } })
+        )
+      );
+    }
+  }
 
   if (datesChanged) {
     const graph = await loadGraph();
