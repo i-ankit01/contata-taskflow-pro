@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { loadGraph } from "./graphState";
 import { getReadiness } from "@/lib/graph/readiness";
-import { propagateSchedule } from "@/lib/graph/propagation";
+import { propagateSchedule, addDays } from "@/lib/graph/propagation";
 import { computeCascadingRegressions } from "@/lib/graph/rollback";
 import { CreateTaskInput, UpdateTaskInput } from "@/lib/validations/task.schema";
 
@@ -18,7 +18,7 @@ export async function listTasksWithReadiness() {
 export async function createTask(input: CreateTaskInput) {
   const endDate =
     input.startDate && input.duration
-      ? new Date(new Date(input.startDate).getTime() + input.duration * 86400000)
+      ? addDays(new Date(input.startDate), input.duration)
       : undefined;
 
   return db.task.create({
@@ -42,10 +42,28 @@ export async function updateTask(taskId: string, input: UpdateTaskInput) {
     input.status !== undefined &&
     input.status !== "DONE";
 
+  // Duration-only edits (the Edit Dates dialog) never send startDate or
+  // endDate directly — this task's own start stays fixed, and its endDate
+  // must be recalculated from (existing) startDate + the new duration
+  // BEFORE we persist, so the graph reload below sees the correct value
+  // for THIS task when computing downstream MAX() propagation.
+  const durationChanged =
+    input.duration !== undefined && input.duration !== existing.duration;
+
+  let computedEndDate = input.endDate;
+  if (
+    durationChanged &&
+    input.startDate === undefined &&
+    input.endDate === undefined &&
+    existing.startDate
+  ) {
+    computedEndDate = addDays(existing.startDate, input.duration!);
+  }
+
   const datesChanged =
+    durationChanged ||
     (input.startDate !== undefined && input.startDate?.getTime() !== existing.startDate?.getTime()) ||
-    (input.endDate !== undefined && input.endDate?.getTime() !== existing.endDate?.getTime()) ||
-    (input.duration !== undefined && input.duration !== existing.duration);
+    (input.endDate !== undefined && input.endDate?.getTime() !== existing.endDate?.getTime());
 
   const updated = await db.task.update({
     where: { id: taskId },
@@ -54,17 +72,13 @@ export async function updateTask(taskId: string, input: UpdateTaskInput) {
       ...(input.description !== undefined && { description: input.description }),
       ...(input.status !== undefined && { status: input.status }),
       ...(input.startDate !== undefined && { startDate: input.startDate }),
-      ...(input.endDate !== undefined && { endDate: input.endDate }),
+      ...(computedEndDate !== undefined && { endDate: computedEndDate }),
       ...(input.duration !== undefined && { duration: input.duration }),
     },
   });
 
-  // Readiness needs no extra write — it's derived fresh on every GET via
-  // getReadiness(). But status IS a stored field, and a task sitting in
-  // Done while its prerequisite chain is no longer satisfied shouldn't
-  // stay there silently. Cascade any downstream DONE tasks back to REVIEW.
   if (isRegressionFromDone) {
-    const graph = await loadGraph(); // reflects the status write above
+    const graph = await loadGraph();
     const cascadeIds = computeCascadingRegressions(graph, taskId);
 
     if (cascadeIds.length > 0) {
@@ -77,6 +91,12 @@ export async function updateTask(taskId: string, input: UpdateTaskInput) {
   }
 
   if (datesChanged) {
+    // Reload AFTER the write above, so this task's node already carries
+    // its corrected endDate — propagateSchedule below only needs to walk
+    // downstream from here, single pass, MAX over each node's direct
+    // prerequisites. This is what guarantees the diamond/no-compounding
+    // behavior verified in Phase 1's test suite still holds for
+    // duration-driven edits, not just direct date edits.
     const graph = await loadGraph();
     const propagated = propagateSchedule(graph, taskId);
 

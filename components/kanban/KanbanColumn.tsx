@@ -9,11 +9,13 @@ export function KanbanColumn({
   title,
   tasks,
   getPrereqTitles,
+  onEditTask,
 }: {
   status: TaskStatus;
   title: string;
   tasks: Task[];
   getPrereqTitles: (taskId: string) => string[];
+  onEditTask: (task: Task) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
@@ -29,7 +31,12 @@ export function KanbanColumn({
         <span className="text-xs text-muted-foreground">{tasks.length}</span>
       </div>
       {tasks.map((task) => (
-        <TaskCard key={task.id} task={task} prerequisiteTitles={getPrereqTitles(task.id)} />
+        <TaskCard
+          key={task.id}
+          task={task}
+          prerequisiteTitles={getPrereqTitles(task.id)}
+          onEdit={onEditTask}
+        />
       ))}
     </div>
   );

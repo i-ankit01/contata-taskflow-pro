@@ -1,6 +1,7 @@
 "use client";
 
 import { useDraggable } from "@dnd-kit/core";
+import { Pencil } from "lucide-react";
 import { Task } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -13,9 +14,11 @@ function formatDate(d: string | null) {
 export function TaskCard({
   task,
   prerequisiteTitles,
+  onEdit,
 }: {
   task: Task;
   prerequisiteTitles: string[];
+  onEdit: (task: Task) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: task.id,
@@ -37,9 +40,24 @@ export function TaskCard({
     >
       <CardHeader className="pb-2 flex flex-row items-start justify-between gap-2">
         <span className="font-medium text-sm">{task.title}</span>
-        <Badge variant={task.readiness === "READY" ? "default" : "secondary"}>
-          {task.readiness === "READY" ? "Ready" : "Blocked"}
-        </Badge>
+        <div className="flex items-center gap-1">
+          <Badge variant={task.readiness === "READY" ? "default" : "secondary"}>
+            {task.readiness === "READY" ? "Ready" : "Blocked"}
+          </Badge>
+          <button
+            type="button"
+            aria-label="Edit dates"
+            className="text-muted-foreground hover:text-foreground p-1"
+            // stop drag + card click from firing when hitting the edit icon
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(task);
+            }}
+          >
+            <Pencil size={14} />
+          </button>
+        </div>
       </CardHeader>
       <CardContent className="pt-0 text-xs text-muted-foreground space-y-1">
         <div>

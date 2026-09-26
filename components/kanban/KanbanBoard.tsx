@@ -18,6 +18,8 @@ import { Dependency, TaskStatus } from "@/types";
 import { Button } from "@/components/ui/button";
 import { AddTaskDialog } from "@/components/tasks/AddTaskDialog";
 import { AddDependencyDialog } from "@/components/dependencies/AddDependencyDialog";
+import { EditTaskDialog } from "@/components/tasks/EditTaskDialog";
+import { Task } from "@/types";
 
 const COLUMNS: { status: TaskStatus; title: string }[] = [
   { status: "BACKLOG", title: "Backlog" },
@@ -27,12 +29,20 @@ const COLUMNS: { status: TaskStatus; title: string }[] = [
 ];
 
 export function KanbanBoard() {
-  const { tasks, loading, error, fetchTasks, updateTaskStatus, createTask } =
-    useTasks();
+  const {
+    tasks,
+    loading,
+    error,
+    fetchTasks,
+    updateTaskStatus,
+    createTask,
+    updateTaskDuration,
+  } = useTasks();
   const [dependencies, setDependencies] = useState<Dependency[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [depDialogOpen, setDepDialogOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -86,7 +96,7 @@ export function KanbanBoard() {
   if (loading)
     return <div className="p-8 text-muted-foreground">Loading board…</div>;
   if (error) return <div className="p-8 text-destructive">Error: {error}</div>;
-  
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
@@ -112,6 +122,7 @@ export function KanbanBoard() {
               title={col.title}
               tasks={tasks.filter((t) => t.status === col.status)}
               getPrereqTitles={getPrereqTitles}
+              onEditTask={setEditingTask}
             />
           ))}
         </div>
@@ -120,10 +131,22 @@ export function KanbanBoard() {
             <TaskCard
               task={activeTask}
               prerequisiteTitles={getPrereqTitles(activeTask.id)}
+              onEdit={() => {}}
             />
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      <EditTaskDialog
+        task={editingTask}
+        open={!!editingTask}
+        onOpenChange={(open) => !open && setEditingTask(null)}
+        onSave={async (id, duration) => {
+          await updateTaskDuration(id, duration);
+          await fetchAll();
+          toast.success("Duration updated — propagation applied downstream");
+        }}
+      />
 
       <AddTaskDialog
         open={taskDialogOpen}

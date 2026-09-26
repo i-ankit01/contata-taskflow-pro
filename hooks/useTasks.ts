@@ -29,7 +29,6 @@ export function useTasks() {
 
   const updateTaskStatus = useCallback(
     async (id: string, status: TaskStatus) => {
-      // optimistic update
       setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
 
       const res = await fetch(`/api/tasks/${id}`, {
@@ -39,11 +38,9 @@ export function useTasks() {
       });
       const json: ApiResponse<Task> = await res.json();
       if (!json.success) {
-        // revert on failure
         await fetchTasks();
         throw new Error(json.error);
       }
-      // status changes can shift readiness for dependents — refetch to stay correct
       await fetchTasks();
     },
     [fetchTasks]
@@ -69,12 +66,15 @@ export function useTasks() {
     [fetchTasks]
   );
 
-  const updateTaskDates = useCallback(
-    async (id: string, input: { startDate?: string; duration?: number }) => {
+  // Duration-only edit. startDate is intentionally never sent from here —
+  // the task's own start stays fixed; only its duration (and therefore its
+  // own + every downstream task's endDate) changes.
+  const updateTaskDuration = useCallback(
+    async (id: string, duration: number) => {
       const res = await fetch(`/api/tasks/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
+        body: JSON.stringify({ duration }),
       });
       const json: ApiResponse<Task> = await res.json();
       if (!json.success) throw new Error(json.error);
@@ -84,5 +84,13 @@ export function useTasks() {
     [fetchTasks]
   );
 
-  return { tasks, loading, error, fetchTasks, updateTaskStatus, createTask, updateTaskDates };
+  return {
+    tasks,
+    loading,
+    error,
+    fetchTasks,
+    updateTaskStatus,
+    createTask,
+    updateTaskDuration,
+  };
 }
