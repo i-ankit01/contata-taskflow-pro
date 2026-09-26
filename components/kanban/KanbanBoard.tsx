@@ -11,15 +11,15 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 import { KanbanColumn } from "./KanbanColumn";
 import { TaskCard } from "./TaskCard";
 import { useTasks } from "@/hooks/useTasks";
-import { Dependency, TaskStatus } from "@/types";
+import { Dependency, Task, TaskStatus } from "@/types";
 import { Button } from "@/components/ui/button";
 import { AddTaskDialog } from "@/components/tasks/AddTaskDialog";
 import { AddDependencyDialog } from "@/components/dependencies/AddDependencyDialog";
 import { EditTaskDialog } from "@/components/tasks/EditTaskDialog";
-import { Task } from "@/types";
 
 const COLUMNS: { status: TaskStatus; title: string }[] = [
   { status: "BACKLOG", title: "Backlog" },
@@ -32,6 +32,7 @@ export function KanbanBoard() {
   const {
     tasks,
     loading,
+    refreshing,
     error,
     fetchTasks,
     updateTaskStatus,
@@ -57,7 +58,7 @@ export function KanbanBoard() {
 
   useEffect(() => {
     fetchAll();
-  }, []); // ← moved up here, before any early return
+  }, []);
 
   const getPrereqTitles = useMemo(() => {
     const byId = new Map(tasks.map((t) => [t.id, t.title]));
@@ -72,33 +73,56 @@ export function KanbanBoard() {
     setActiveId(event.active.id as string);
   }
 
-  async function handleDragEnd(event: DragEndEvent) {
-    setActiveId(null);
-    const { active, over } = event;
-    if (!over) return;
+async function handleDragEnd(event: DragEndEvent) {
+  setActiveId(null);
+  const { active, over } = event;
+  if (!over) return;
 
-    const taskId = active.id as string;
-    const newStatus = over.id as TaskStatus;
-    const task = tasks.find((t) => t.id === taskId);
-    if (!task || task.status === newStatus) return;
+  const taskId = active.id as string;
+  const newStatus = over.id as TaskStatus;
+  const task = tasks.find((t) => t.id === taskId);
+  if (!task || task.status === newStatus) return;
 
-    try {
-      await updateTaskStatus(taskId, newStatus);
-      toast.success(`"${task.title}" moved to ${newStatus.replace("_", " ")}`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to move task");
-    }
+  // A task can only reach Done once it's actually Ready — its prerequisites
+  // must be Done, per the derived readiness computed server-side.
+  if (newStatus === "DONE" && task.readiness === "BLOCKED") {
+    toast.error(
+      `"${task.title}" is blocked — move it through Review or In Progress first, not directly to Done.`
+    );
+    return;
   }
+
+  try {
+    await updateTaskStatus(taskId, newStatus);
+    toast.success(`"${task.title}" moved to ${newStatus.replace("_", " ")}`);
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : "Failed to move task");
+  }
+}
 
   const activeTask = tasks.find((t) => t.id === activeId);
 
-  // early returns now come AFTER every hook has been called
+  // Only the very first load shows the full-page state — every subsequent
+  // refetch (drag, status change, duration edit) uses the slim top bar below
+  // instead, so the board never unmounts/blinks.
   if (loading)
     return <div className="p-8 text-muted-foreground">Loading board…</div>;
   if (error) return <div className="p-8 text-destructive">Error: {error}</div>;
 
   return (
     <div className="p-6">
+      {/* Slim updating indicator — fixed height, doesn't shift layout, doesn't unmount the board */}
+      <div
+        className={`fixed top-0 left-1/2 -translate-x-1/2 z-50 transition-opacity duration-150 ${
+          refreshing ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+      >
+        <div className="mt-2 flex items-center gap-2 rounded-full bg-foreground text-background text-xs px-3 py-1.5 shadow-md">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Updating…
+        </div>
+      </div>
+
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold">TaskFlow Pro</h1>
         <div className="flex gap-2">
@@ -137,17 +161,6 @@ export function KanbanBoard() {
         </DragOverlay>
       </DndContext>
 
-      <EditTaskDialog
-        task={editingTask}
-        open={!!editingTask}
-        onOpenChange={(open) => !open && setEditingTask(null)}
-        onSave={async (id, duration) => {
-          await updateTaskDuration(id, duration);
-          await fetchAll();
-          toast.success("Duration updated — propagation applied downstream");
-        }}
-      />
-
       <AddTaskDialog
         open={taskDialogOpen}
         onOpenChange={setTaskDialogOpen}
@@ -162,6 +175,16 @@ export function KanbanBoard() {
         tasks={tasks}
         onCreated={async () => {
           await fetchAll();
+        }}
+      />
+      <EditTaskDialog
+        task={editingTask}
+        open={!!editingTask}
+        onOpenChange={(open) => !open && setEditingTask(null)}
+        onSave={async (id, duration) => {
+          await updateTaskDuration(id, duration);
+          await fetchAll();
+          toast.success("Duration updated — propagation applied downstream");
         }}
       />
     </div>

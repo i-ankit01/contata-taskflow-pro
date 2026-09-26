@@ -5,11 +5,12 @@ import { Task, TaskStatus, ApiResponse } from "@/types";
 
 export function useTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // true only until first load completes
+  const [refreshing, setRefreshing] = useState(false); // true during any background refetch
   const [error, setError] = useState<string | null>(null);
 
   const fetchTasks = useCallback(async () => {
-    setLoading(true);
+    setRefreshing(true);
     setError(null);
     try {
       const res = await fetch("/api/tasks", { cache: "no-store" });
@@ -20,6 +21,7 @@ export function useTasks() {
       setError(e instanceof Error ? e.message : "Failed to load tasks");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -66,9 +68,6 @@ export function useTasks() {
     [fetchTasks]
   );
 
-  // Duration-only edit. startDate is intentionally never sent from here —
-  // the task's own start stays fixed; only its duration (and therefore its
-  // own + every downstream task's endDate) changes.
   const updateTaskDuration = useCallback(
     async (id: string, duration: number) => {
       const res = await fetch(`/api/tasks/${id}`, {
@@ -78,7 +77,7 @@ export function useTasks() {
       });
       const json: ApiResponse<Task> = await res.json();
       if (!json.success) throw new Error(json.error);
-      await fetchTasks(); // pulls in propagated downstream dates too
+      await fetchTasks();
       return json.data;
     },
     [fetchTasks]
@@ -87,6 +86,7 @@ export function useTasks() {
   return {
     tasks,
     loading,
+    refreshing,
     error,
     fetchTasks,
     updateTaskStatus,

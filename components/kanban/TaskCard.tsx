@@ -11,6 +11,12 @@ function formatDate(d: string | null) {
   return new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function getStatusBadge(task: Task): { label: string; variant: "default" | "secondary" } {
+  if (task.status === "DONE") return { label: "Completed", variant: "default" };
+  if (task.readiness === "READY") return { label: "Ready", variant: "default" };
+  return { label: "Blocked", variant: "secondary" };
+}
+
 export function TaskCard({
   task,
   prerequisiteTitles,
@@ -28,6 +34,8 @@ export function TaskCard({
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
     : undefined;
 
+  const badge = getStatusBadge(task);
+
   return (
     <Card
       ref={setNodeRef}
@@ -41,14 +49,11 @@ export function TaskCard({
       <CardHeader className="pb-2 flex flex-row items-start justify-between gap-2">
         <span className="font-medium text-sm">{task.title}</span>
         <div className="flex items-center gap-1">
-          <Badge variant={task.readiness === "READY" ? "default" : "secondary"}>
-            {task.readiness === "READY" ? "Ready" : "Blocked"}
-          </Badge>
+          <Badge variant={badge.variant}>{badge.label}</Badge>
           <button
             type="button"
             aria-label="Edit dates"
             className="text-muted-foreground hover:text-foreground p-1"
-            // stop drag + card click from firing when hitting the edit icon
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
