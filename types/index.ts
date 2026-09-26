@@ -24,3 +24,11 @@ export type Dependency = {
 export type ApiResponse<T> =
   | { success: true; data: T }
   | { success: false; error: string };
+
+
+export type AISuggestion = {
+  taskId: string;
+  dependsOnTaskId: string;
+  reason: string;
+  confidence: number;
+};

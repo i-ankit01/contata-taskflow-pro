@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { AddTaskDialog } from "@/components/tasks/AddTaskDialog";
 import { AddDependencyDialog } from "@/components/dependencies/AddDependencyDialog";
 import { EditTaskDialog } from "@/components/tasks/EditTaskDialog";
+import { AISuggestionsPanel } from "@/components/ai/AISuggestionsPanel";
 
 const COLUMNS: { status: TaskStatus; title: string }[] = [
   { status: "BACKLOG", title: "Backlog" },
@@ -44,6 +45,7 @@ export function KanbanBoard() {
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [depDialogOpen, setDepDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -73,32 +75,32 @@ export function KanbanBoard() {
     setActiveId(event.active.id as string);
   }
 
-async function handleDragEnd(event: DragEndEvent) {
-  setActiveId(null);
-  const { active, over } = event;
-  if (!over) return;
+  async function handleDragEnd(event: DragEndEvent) {
+    setActiveId(null);
+    const { active, over } = event;
+    if (!over) return;
 
-  const taskId = active.id as string;
-  const newStatus = over.id as TaskStatus;
-  const task = tasks.find((t) => t.id === taskId);
-  if (!task || task.status === newStatus) return;
+    const taskId = active.id as string;
+    const newStatus = over.id as TaskStatus;
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task || task.status === newStatus) return;
 
-  // A task can only reach Done once it's actually Ready — its prerequisites
-  // must be Done, per the derived readiness computed server-side.
-  if (newStatus === "DONE" && task.readiness === "BLOCKED") {
-    toast.error(
-      `"${task.title}" is blocked — move it through Review or In Progress first, not directly to Done.`
-    );
-    return;
+    // A task can only reach Done once it's actually Ready — its prerequisites
+    // must be Done, per the derived readiness computed server-side.
+    if (newStatus === "DONE" && task.readiness === "BLOCKED") {
+      toast.error(
+        `"${task.title}" is blocked — move it through Review or In Progress first, not directly to Done.`,
+      );
+      return;
+    }
+
+    try {
+      await updateTaskStatus(taskId, newStatus);
+      toast.success(`"${task.title}" moved to ${newStatus.replace("_", " ")}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to move task");
+    }
   }
-
-  try {
-    await updateTaskStatus(taskId, newStatus);
-    toast.success(`"${task.title}" moved to ${newStatus.replace("_", " ")}`);
-  } catch (e) {
-    toast.error(e instanceof Error ? e.message : "Failed to move task");
-  }
-}
 
   const activeTask = tasks.find((t) => t.id === activeId);
 
@@ -130,6 +132,9 @@ async function handleDragEnd(event: DragEndEvent) {
             Add Dependency
           </Button>
           <Button onClick={() => setTaskDialogOpen(true)}>Add Task</Button>
+          <Button variant="outline" onClick={() => setAiDialogOpen(true)}>
+            AI Suggestions
+          </Button>
         </div>
       </div>
 
@@ -186,6 +191,12 @@ async function handleDragEnd(event: DragEndEvent) {
           await fetchAll();
           toast.success("Duration updated — propagation applied downstream");
         }}
+      />
+      <AISuggestionsPanel
+        open={aiDialogOpen}
+        onOpenChange={setAiDialogOpen}
+        tasks={tasks}
+        onAccepted={fetchAll}
       />
     </div>
   );
