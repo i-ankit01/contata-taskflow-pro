@@ -5,3 +5,4 @@ export * from "./readiness";
 export * from "./topologicalSort";
 export * from "./propagation";
 export * from "./rollback";
+export * from "./criticalPath";

@@ -21,6 +21,7 @@ import { AddTaskDialog } from "@/components/tasks/AddTaskDialog";
 import { AddDependencyDialog } from "@/components/dependencies/AddDependencyDialog";
 import { EditTaskDialog } from "@/components/tasks/EditTaskDialog";
 import { AISuggestionsPanel } from "@/components/ai/AISuggestionsPanel";
+import Link from "next/link";
 
 const COLUMNS: { status: TaskStatus; title: string }[] = [
   { status: "BACKLOG", title: "Backlog" },
@@ -135,6 +136,9 @@ export function KanbanBoard() {
           <Button variant="outline" onClick={() => setAiDialogOpen(true)}>
             AI Suggestions
           </Button>
+          <Link href="/dashboard">
+            <Button variant="outline">View Dependency Graph</Button>
+          </Link>
         </div>
       </div>
 
