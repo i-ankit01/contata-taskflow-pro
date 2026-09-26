@@ -34,14 +34,15 @@ export function AddTaskDialog({
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit() {
-    if (!title.trim()) return;
+    const durationValue = Number(duration);
+    if (!title.trim() || !startDate || !duration || !Number.isFinite(durationValue) || durationValue <= 0) return;
     setSubmitting(true);
     try {
       await onCreate({
         title: title.trim(),
         description: description.trim() || undefined,
-        startDate: startDate || undefined,
-        duration: duration ? Number(duration) : undefined,
+        startDate,
+        duration: durationValue,
       });
       setTitle("");
       setDescription("");
@@ -62,7 +63,7 @@ export function AddTaskDialog({
         <div className="space-y-3">
           <div>
             <Label htmlFor="title">Title</Label>
-            <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <Input id="title" required value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
           <div>
             <Label htmlFor="description">Description</Label>
@@ -78,6 +79,7 @@ export function AddTaskDialog({
               <Input
                 id="startDate"
                 type="date"
+                required
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
               />
@@ -88,6 +90,7 @@ export function AddTaskDialog({
                 id="duration"
                 type="number"
                 min={1}
+                required
                 value={duration}
                 onChange={(e) => setDuration(e.target.value)}
               />
@@ -95,7 +98,17 @@ export function AddTaskDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button onClick={handleSubmit} disabled={submitting || !title.trim()}>
+          <Button
+            onClick={handleSubmit}
+            disabled={
+              submitting ||
+              !title.trim() ||
+              !startDate ||
+              !duration ||
+              !Number.isFinite(Number(duration)) ||
+              Number(duration) <= 0
+            }
+          >
             {submitting ? "Creating…" : "Create Task"}
           </Button>
         </DialogFooter>
