@@ -3,17 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { Task, TaskStatus, ApiResponse } from "@/types";
 
-export function useTasks() {
+export function useTasks(projectId: string) {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true); // true only until first load completes
-  const [refreshing, setRefreshing] = useState(false); // true during any background refetch
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchTasks = useCallback(async () => {
     setRefreshing(true);
     setError(null);
     try {
-      const res = await fetch("/api/tasks", { cache: "no-store" });
+      const res = await fetch(`/api/projects/${projectId}/tasks`, { cache: "no-store" });
       const json: ApiResponse<Task[]> = await res.json();
       if (!json.success) throw new Error(json.error);
       setTasks(json.data);
@@ -23,7 +23,7 @@ export function useTasks() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [projectId]);
 
   useEffect(() => {
     fetchTasks();
@@ -32,8 +32,7 @@ export function useTasks() {
   const updateTaskStatus = useCallback(
     async (id: string, status: TaskStatus) => {
       setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
-
-      const res = await fetch(`/api/tasks/${id}`, {
+      const res = await fetch(`/api/projects/${projectId}/tasks/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
@@ -45,17 +44,12 @@ export function useTasks() {
       }
       await fetchTasks();
     },
-    [fetchTasks]
+    [projectId, fetchTasks]
   );
 
   const createTask = useCallback(
-    async (input: {
-      title: string;
-      description?: string;
-      startDate?: string;
-      duration?: number;
-    }) => {
-      const res = await fetch("/api/tasks", {
+    async (input: { title: string; description?: string; startDate?: string; duration?: number }) => {
+      const res = await fetch(`/api/projects/${projectId}/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
@@ -65,12 +59,12 @@ export function useTasks() {
       await fetchTasks();
       return json.data;
     },
-    [fetchTasks]
+    [projectId, fetchTasks]
   );
 
   const updateTaskDuration = useCallback(
     async (id: string, duration: number) => {
-      const res = await fetch(`/api/tasks/${id}`, {
+      const res = await fetch(`/api/projects/${projectId}/tasks/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ duration }),
@@ -80,17 +74,8 @@ export function useTasks() {
       await fetchTasks();
       return json.data;
     },
-    [fetchTasks]
+    [projectId, fetchTasks]
   );
 
-  return {
-    tasks,
-    loading,
-    refreshing,
-    error,
-    fetchTasks,
-    updateTaskStatus,
-    createTask,
-    updateTaskDuration,
-  };
+  return { tasks, loading, refreshing, error, fetchTasks, updateTaskStatus, createTask, updateTaskDuration };
 }

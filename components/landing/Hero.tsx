@@ -1,4 +1,5 @@
 import { DependencyGraph } from "./DependencyGraph";
+import Link from "next/link";
 
 export function Hero() {
   return (
@@ -20,12 +21,12 @@ export function Hero() {
             checked against a real dependency graph, every time you look.
           </p>
           <div className="mt-8 flex flex-wrap gap-3.5">
-            <a
-              href="#start"
-              className="rounded border border-ink bg-ink px-[22px] py-3 text-[14.5px] font-medium text-paper transition-opacity hover:opacity-85"
+            <Link
+              href="/projects"
+              className="rounded border border-black bg-black px-[22px] py-3 text-[14.5px] font-medium text-white transition-opacity hover:opacity-85"
             >
-              See the demo flow
-            </a>
+              Open the board
+            </Link>
             <a
               href="#rules"
               className="rounded border border-line-strong px-[22px] py-3 text-[14.5px] font-medium text-ink transition-colors hover:border-ink"

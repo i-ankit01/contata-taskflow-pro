@@ -16,11 +16,13 @@ import { Task, AISuggestion, ApiResponse } from "@/types";
 import { useDependencies, CycleRejectedError } from "@/hooks/useDependencies";
 
 export function AISuggestionsPanel({
+  projectId,
   open,
   onOpenChange,
   tasks,
   onAccepted,
 }: {
+  projectId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tasks: Task[];
@@ -30,7 +32,7 @@ export function AISuggestionsPanel({
   const [hasRun, setHasRun] = useState(false);
   const [suggestions, setSuggestions] = useState<AISuggestion[]>([]);
   const [acceptingKey, setAcceptingKey] = useState<string | null>(null);
-  const { createDependency } = useDependencies(onAccepted);
+  const { createDependency } = useDependencies(projectId, onAccepted);
 
   const titleOf = (id: string) => tasks.find((t) => t.id === id)?.title ?? id;
   const keyOf = (s: AISuggestion) => `${s.taskId}::${s.dependsOnTaskId}`;
@@ -38,7 +40,7 @@ export function AISuggestionsPanel({
   async function handleGenerate() {
     setLoading(true);
     try {
-      const res = await fetch("/api/ai/suggestions", { method: "POST" });
+      const res = await fetch(`/api/projects/${projectId}/ai/suggestions`, { method: "POST" });
       const json: ApiResponse<{ suggestions: AISuggestion[] }> = await res.json();
       if (!json.success) throw new Error(json.error);
       setSuggestions(json.data.suggestions);

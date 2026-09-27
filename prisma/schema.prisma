@@ -6,8 +6,18 @@ datasource db {
   provider  = "postgresql"
 }
 
+model Project {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks Task[]
+}
+
 model Task {
   id          String     @id @default(cuid())
+  projectId   String
   title       String
   description String?
   status      TaskStatus @default(BACKLOG)
@@ -17,8 +27,11 @@ model Task {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
+  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   dependsOn  Dependency[] @relation("TaskDependsOn")
   dependents Dependency[] @relation("DependsOnTask")
+
+  @@index([projectId])
 }
 
 model Dependency {

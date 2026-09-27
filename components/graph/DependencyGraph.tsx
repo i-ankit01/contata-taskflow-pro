@@ -81,9 +81,13 @@ export function DependencyGraph({ tasks, dependencies }: { tasks: Task[]; depend
         id: d.id,
         source: d.dependsOnTaskId, // prerequisite ...
         target: d.taskId, // ... flows into the dependent
+        type: "smoothstep",
         animated: isCritical,
-        markerEnd: { type: MarkerType.ArrowClosed },
-        style: { stroke: isCritical ? "#dc2626" : "#94a3b8", strokeWidth: isCritical ? 3 : 1.5 },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: isCritical ? "#dc2626" : "#334155",
+        },
+        style: { stroke: isCritical ? "#dc2626" : "#334155", strokeWidth: isCritical ? 4 : 2.5 },
       };
     });
 

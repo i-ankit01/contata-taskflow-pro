@@ -5,17 +5,16 @@ import { updateTask } from "@/lib/services/taskService";
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ projectId: string; id: string }> }
 ) {
   const body = await req.json();
   const parsed = updateTaskSchema.safeParse(body);
   if (!parsed.success) {
     return fail(parsed.error.issues.map((i) => i.message).join(", "), 400);
   }
-
   try {
-    const { id } = await params;
-    const task = await updateTask(id, parsed.data);
+    const { projectId, id } = await params;
+    const task = await updateTask(projectId, id, parsed.data);
     return ok(task);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to update task";

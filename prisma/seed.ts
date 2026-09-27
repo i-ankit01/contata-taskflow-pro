@@ -13,6 +13,11 @@ const prisma = new PrismaClient({
 async function main() {
   await prisma.dependency.deleteMany();
   await prisma.task.deleteMany();
+  await prisma.project.deleteMany();
+
+  const project = await prisma.project.create({
+    data: { name: "Sample Software Project" },
+  });
 
   const today = new Date();
   const days = (n: number) => {
@@ -41,6 +46,7 @@ async function main() {
     const endDate = days(t.start + t.duration);
     const task = await prisma.task.create({
       data: {
+        projectId: project.id,
         title: t.title,
         status: TaskStatus.BACKLOG,
         startDate,
@@ -68,14 +74,11 @@ async function main() {
 
   for (const [taskKey, dependsOnKey] of deps) {
     await prisma.dependency.create({
-      data: {
-        taskId: idMap[taskKey],
-        dependsOnTaskId: idMap[dependsOnKey],
-      },
+      data: { taskId: idMap[taskKey], dependsOnTaskId: idMap[dependsOnKey] },
     });
   }
 
-  console.log("Seeded 10 tasks and 12 dependencies.");
+  console.log(`Seeded project "${project.name}" with 10 tasks and 12 dependencies.`);
 }
 
 main()

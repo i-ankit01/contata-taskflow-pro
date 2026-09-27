@@ -2,11 +2,11 @@ import { db } from "@/lib/db";
 import { Graph, GraphNode, GraphEdge } from "@/lib/graph/types";
 import { buildGraph } from "@/lib/graph/buildGraph";
 
-/** Loads the full task/dependency graph from the DB as plain objects. */
-export async function loadGraph(): Promise<Graph> {
+/** Loads one project's task/dependency graph from the DB as plain objects. */
+export async function loadGraph(projectId: string): Promise<Graph> {
   const [tasks, dependencies] = await Promise.all([
-    db.task.findMany(),
-    db.dependency.findMany(),
+    db.task.findMany({ where: { projectId } }),
+    db.dependency.findMany({ where: { task: { projectId } } }),
   ]);
 
   const nodes: GraphNode[] = tasks.map((t) => ({

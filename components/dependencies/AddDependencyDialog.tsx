@@ -22,20 +22,24 @@ import { Task } from "@/types";
 import { useDependencies, CycleRejectedError } from "@/hooks/useDependencies";
 
 export function AddDependencyDialog({
+  projectId,
   open,
   onOpenChange,
   tasks,
   onCreated,
 }: {
+  projectId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tasks: Task[];
   onCreated: () => Promise<void>;
 }) {
-  const { createDependency } = useDependencies(onCreated);
+  const { createDependency } = useDependencies(projectId, onCreated);
   const [taskId, setTaskId] = useState<string>("");
   const [dependsOnTaskId, setDependsOnTaskId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+
+  const taskTitle = (id: string) => tasks.find((task) => task.id === id)?.title ?? "";
 
   async function handleSubmit() {
     if (!taskId || !dependsOnTaskId || taskId === dependsOnTaskId) return;
@@ -68,11 +72,11 @@ export function AddDependencyDialog({
             <Label>Task</Label>
             <Select value={taskId} onValueChange={(value) => setTaskId(value ?? "")}>
               <SelectTrigger>
-                <SelectValue placeholder="Select task" />
+                <SelectValue placeholder="Select task">{taskTitle(taskId)}</SelectValue>
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="min-w-[320px] max-w-[calc(100vw-2rem)] p-1.5">
                 {tasks.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
+                  <SelectItem className="px-2.5 py-2" key={t.id} value={t.id}>
                     {t.title}
                   </SelectItem>
                 ))}
@@ -83,13 +87,13 @@ export function AddDependencyDialog({
             <Label>Depends on</Label>
             <Select value={dependsOnTaskId} onValueChange={(value) => setDependsOnTaskId(value ?? "")}>
               <SelectTrigger>
-                <SelectValue placeholder="Select prerequisite" />
+                <SelectValue placeholder="Select prerequisite">{taskTitle(dependsOnTaskId)}</SelectValue>
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="min-w-[320px] max-w-[calc(100vw-2rem)] p-1.5">
                 {tasks
                   .filter((t) => t.id !== taskId)
                   .map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
+                    <SelectItem className="px-2.5 py-2" key={t.id} value={t.id}>
                       {t.title}
                     </SelectItem>
                   ))}

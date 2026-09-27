@@ -11,7 +11,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { KanbanColumn } from "./KanbanColumn";
 import { TaskCard } from "./TaskCard";
 import { useTasks } from "@/hooks/useTasks";
@@ -30,17 +30,9 @@ const COLUMNS: { status: TaskStatus; title: string }[] = [
   { status: "DONE", title: "Done" },
 ];
 
-export function KanbanBoard() {
-  const {
-    tasks,
-    loading,
-    refreshing,
-    error,
-    fetchTasks,
-    updateTaskStatus,
-    createTask,
-    updateTaskDuration,
-  } = useTasks();
+export function KanbanBoard({ projectId }: { projectId: string }) {
+  const { tasks, loading, refreshing, error, fetchTasks, updateTaskStatus, createTask, updateTaskDuration } =
+    useTasks(projectId);
   const [dependencies, setDependencies] = useState<Dependency[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
@@ -54,7 +46,7 @@ export function KanbanBoard() {
 
   const fetchAll = async () => {
     await fetchTasks();
-    const res = await fetch("/api/dependencies", { cache: "no-store" });
+    const res = await fetch(`/api/projects/${projectId}/dependencies`, { cache: "no-store" });
     const json = await res.json();
     if (json.success) setDependencies(json.data);
   };
@@ -127,7 +119,14 @@ export function KanbanBoard() {
       </div>
 
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold">TaskFlow Pro</h1>
+        <div className="flex items-center gap-3">
+          <Link href="/projects">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="mr-1" /> Back to Projects
+            </Button>
+          </Link>
+          <h1 className="text-xl font-bold">TaskFlow Pro</h1>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setDepDialogOpen(true)}>
             Add Dependency
@@ -136,7 +135,7 @@ export function KanbanBoard() {
           <Button variant="outline" onClick={() => setAiDialogOpen(true)}>
             AI Suggestions
           </Button>
-          <Link href="/dashboard">
+          <Link href={`/projects/${projectId}/dashboard`}>
             <Button variant="outline">View Dependency Graph</Button>
           </Link>
         </div>
@@ -179,6 +178,7 @@ export function KanbanBoard() {
         }}
       />
       <AddDependencyDialog
+        projectId={projectId}
         open={depDialogOpen}
         onOpenChange={setDepDialogOpen}
         tasks={tasks}
@@ -197,6 +197,7 @@ export function KanbanBoard() {
         }}
       />
       <AISuggestionsPanel
+      projectId={projectId}
         open={aiDialogOpen}
         onOpenChange={setAiDialogOpen}
         tasks={tasks}

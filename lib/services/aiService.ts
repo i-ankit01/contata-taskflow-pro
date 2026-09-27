@@ -135,10 +135,16 @@ const responseFormat = {
  * cycle) before being returned, so a hallucinated or unsafe suggestion
  * never reaches the UI even before a human decides to accept it.
  */
-export async function generateDependencySuggestions(): Promise<AISuggestion[]> {
+export async function generateDependencySuggestions(projectId: string): Promise<AISuggestion[]> {
   const [tasks, dependencies] = await Promise.all([
-    db.task.findMany({ select: { id: true, title: true, description: true, status: true, startDate: true, endDate: true, duration: true } }),
-    db.dependency.findMany({ select: { taskId: true, dependsOnTaskId: true } }),
+    db.task.findMany({
+      where: { projectId },
+      select: { id: true, title: true, description: true, status: true, startDate: true, endDate: true, duration: true },
+    }),
+    db.dependency.findMany({
+      where: { task: { projectId } },
+      select: { taskId: true, dependsOnTaskId: true },
+    }),
   ]);
 
   if (tasks.length === 0) return [];

@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export function Closer() {
   return (
     <section id="start" className="border-t border-line py-20 sm:py-24">
@@ -12,12 +14,12 @@ export function Closer() {
             engine and read the tests yourself.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3.5">
-            <a
-              href="#"
-              className="rounded border border-ink bg-ink px-[22px] py-3 text-[14.5px] font-medium text-paper transition-opacity hover:opacity-85"
+            <Link
+              href="/projects"
+              className="rounded border border-black bg-black px-[22px] py-3 text-[14.5px] font-medium text-white transition-opacity hover:opacity-85"
             >
               Open the board
-            </a>
+            </Link>
             <a
               href="#"
               className="rounded border border-line-strong px-[22px] py-3 text-[14.5px] font-medium text-ink transition-colors hover:border-ink"

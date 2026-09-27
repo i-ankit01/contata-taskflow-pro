@@ -3,24 +3,24 @@ import { ok, fail } from "@/lib/api-response";
 import { createTaskSchema } from "@/lib/validations/task.schema";
 import { listTasksWithReadiness, createTask } from "@/lib/services/taskService";
 
-export async function GET() {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ projectId: string }> }) {
   try {
-    const tasks = await listTasksWithReadiness();
-    return ok(tasks);
+    const { projectId } = await params;
+    return ok(await listTasksWithReadiness(projectId));
   } catch (e) {
     return fail(e instanceof Error ? e.message : "Failed to list tasks", 500);
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ projectId: string }> }) {
   const body = await req.json();
   const parsed = createTaskSchema.safeParse(body);
   if (!parsed.success) {
     return fail(parsed.error.issues.map((i) => i.message).join(", "), 400);
   }
-
   try {
-    const task = await createTask(parsed.data);
+    const { projectId } = await params;
+    const task = await createTask(projectId, parsed.data);
     return ok(task, 201);
   } catch (e) {
     return fail(e instanceof Error ? e.message : "Failed to create task", 500);

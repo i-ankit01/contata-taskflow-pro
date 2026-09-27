@@ -5,9 +5,12 @@ import { propagateSchedule, addDays } from "@/lib/graph/propagation";
 import { computeCascadingRegressions } from "@/lib/graph/rollback";
 import { CreateTaskInput, UpdateTaskInput } from "@/lib/validations/task.schema";
 
-export async function listTasksWithReadiness() {
-  const graph = await loadGraph();
-  const tasks = await db.task.findMany({ orderBy: { createdAt: "asc" } });
+export async function listTasksWithReadiness(projectId: string) {
+  const graph = await loadGraph(projectId);
+  const tasks = await db.task.findMany({
+    where: { projectId },
+    orderBy: { createdAt: "asc" },
+  });
 
   return tasks.map((t) => ({
     ...t,
@@ -15,7 +18,7 @@ export async function listTasksWithReadiness() {
   }));
 }
 
-export async function createTask(input: CreateTaskInput) {
+export async function createTask(projectId: string, input: CreateTaskInput) {
   const endDate =
     input.startDate && input.duration
       ? addDays(new Date(input.startDate), input.duration)
@@ -23,6 +26,7 @@ export async function createTask(input: CreateTaskInput) {
 
   return db.task.create({
     data: {
+      projectId,
       title: input.title,
       description: input.description,
       status: input.status,
@@ -33,22 +37,14 @@ export async function createTask(input: CreateTaskInput) {
   });
 }
 
-export async function updateTask(taskId: string, input: UpdateTaskInput) {
+export async function updateTask(projectId: string, taskId: string, input: UpdateTaskInput) {
   const existing = await db.task.findUnique({ where: { id: taskId } });
-  if (!existing) throw new Error("Task not found");
+  if (!existing || existing.projectId !== projectId) throw new Error("Task not found");
 
   const isRegressionFromDone =
-    existing.status === "DONE" &&
-    input.status !== undefined &&
-    input.status !== "DONE";
+    existing.status === "DONE" && input.status !== undefined && input.status !== "DONE";
 
-  // Duration-only edits (the Edit Dates dialog) never send startDate or
-  // endDate directly — this task's own start stays fixed, and its endDate
-  // must be recalculated from (existing) startDate + the new duration
-  // BEFORE we persist, so the graph reload below sees the correct value
-  // for THIS task when computing downstream MAX() propagation.
-  const durationChanged =
-    input.duration !== undefined && input.duration !== existing.duration;
+  const durationChanged = input.duration !== undefined && input.duration !== existing.duration;
 
   let computedEndDate = input.endDate;
   if (
@@ -78,26 +74,17 @@ export async function updateTask(taskId: string, input: UpdateTaskInput) {
   });
 
   if (isRegressionFromDone) {
-    const graph = await loadGraph();
+    const graph = await loadGraph(projectId);
     const cascadeIds = computeCascadingRegressions(graph, taskId);
-
     if (cascadeIds.length > 0) {
       await db.$transaction(
-        cascadeIds.map((id) =>
-          db.task.update({ where: { id }, data: { status: "REVIEW" } })
-        )
+        cascadeIds.map((id) => db.task.update({ where: { id }, data: { status: "REVIEW" } }))
       );
     }
   }
 
   if (datesChanged) {
-    // Reload AFTER the write above, so this task's node already carries
-    // its corrected endDate — propagateSchedule below only needs to walk
-    // downstream from here, single pass, MAX over each node's direct
-    // prerequisites. This is what guarantees the diamond/no-compounding
-    // behavior verified in Phase 1's test suite still holds for
-    // duration-driven edits, not just direct date edits.
-    const graph = await loadGraph();
+    const graph = await loadGraph(projectId);
     const propagated = propagateSchedule(graph, taskId);
 
     const writes = [];
@@ -110,10 +97,7 @@ export async function updateTask(taskId: string, input: UpdateTaskInput) {
           original.endDate?.getTime() !== node.endDate?.getTime())
       ) {
         writes.push(
-          db.task.update({
-            where: { id },
-            data: { startDate: node.startDate, endDate: node.endDate },
-          })
+          db.task.update({ where: { id }, data: { startDate: node.startDate, endDate: node.endDate } })
         );
       }
     }
