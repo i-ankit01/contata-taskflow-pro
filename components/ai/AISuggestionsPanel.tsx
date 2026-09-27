@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Sparkles, Loader2, Check, X } from "lucide-react";
+import { Loader2, Check, X, BotIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -90,7 +90,7 @@ export function AISuggestionsPanel({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles size={18} /> AI Dependency Suggestions
+            <BotIcon size={18} /> AI Dependency Suggestions
           </DialogTitle>
         </DialogHeader>
 
@@ -111,7 +111,7 @@ export function AISuggestionsPanel({
 
           {!loading && hasRun && suggestions.length === 0 && (
             <div className="text-sm text-muted-foreground py-6 text-center">
-              Graph is complete. No additional dependency suggestions required.
+              Graph is complete. No additional dependency suggestions required. Add new Tasks to get dependency suggestions.
             </div>
           )}
 
