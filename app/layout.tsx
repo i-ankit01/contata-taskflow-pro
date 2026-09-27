@@ -22,7 +22,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TaskFlow Pro — dependency-aware task boards",
+  title: "TaskFlow Pro - dependency-aware task boards",
   description:
     "TaskFlow Pro treats your project as a dependency graph, not a wishful list of columns. A task is only Ready when every prerequisite actually is.",
 };

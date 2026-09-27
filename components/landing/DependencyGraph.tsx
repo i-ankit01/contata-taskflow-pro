@@ -41,14 +41,14 @@ function nodeCenter(n: GraphNode) {
 function nodeClasses(state: NodeState) {
   switch (state) {
     case "done":
-      return { rect: "fill-ink stroke-ink", text: "fill-paper" };
+      return { rect: "fill-[#dcfce7] stroke-[#15803d] stroke-[1.5]", text: "fill-[#166534]" };
     case "ready":
-      return { rect: "fill-transparent stroke-ink stroke-[1.6]", text: "fill-dim" };
+      return { rect: "fill-[#fef3c7] stroke-[#b45309] stroke-[1.6]", text: "fill-[#92400e]" };
     case "blocked":
     default:
       return {
-        rect: "fill-transparent stroke-line-strong stroke-[1.2] [stroke-dasharray:3_3]",
-        text: "fill-dim",
+        rect: "fill-[#fee2e2] stroke-[#b91c1c] stroke-[1.5] [stroke-dasharray:3_3]",
+        text: "fill-[#991b1b]",
       };
   }
 }
@@ -58,7 +58,7 @@ export function DependencyGraph() {
 
   return (
     <svg viewBox="0 0 410 190" className="block h-auto w-full">
-      <g className="stroke-line-strong stroke-[1.1]">
+      <g className="stroke-[#64748b] stroke-[1.5]">
         {EDGES.map(([from, to]) => {
           const a = nodeCenter(byId[from]);
           const b = nodeCenter(byId[to]);

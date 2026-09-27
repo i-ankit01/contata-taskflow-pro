@@ -35,15 +35,15 @@ export function Hero() {
           </div>
           <div className="mt-7 flex flex-wrap gap-4.5 text-[12.5px] text-dim">
             <span className="inline-flex items-center gap-1.5">
-              <i className="inline-block h-[9px] w-[9px] rounded-[2px] bg-ink" />
+              <i className="inline-block h-[9px] w-[9px] rounded-[2px] border border-[#15803d] bg-[#dcfce7]" />
               Done
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <i className="inline-block h-[9px] w-[9px] rounded-[2px] border-[1.5px] border-ink" />
+              <i className="inline-block h-[9px] w-[9px] rounded-[2px] border-[1.5px] border-[#b45309] bg-[#fef3c7]" />
               Ready
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <i className="inline-block h-[9px] w-[9px] rounded-[2px] border-[1.5px] border-dashed border-line-strong" />
+              <i className="inline-block h-[9px] w-[9px] rounded-[2px] border-[1.5px] border-dashed border-[#b91c1c] bg-[#fee2e2]" />
               Blocked
             </span>
           </div>
