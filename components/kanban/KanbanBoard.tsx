@@ -21,6 +21,7 @@ import { AddTaskDialog } from "@/components/tasks/AddTaskDialog";
 import { AddDependencyDialog } from "@/components/dependencies/AddDependencyDialog";
 import { EditTaskDialog } from "@/components/tasks/EditTaskDialog";
 import { AISuggestionsPanel } from "@/components/ai/AISuggestionsPanel";
+import { LoadingState } from "@/components/ui/loading-state";
 import Link from "next/link";
 
 const COLUMNS: { status: TaskStatus; title: string }[] = [
@@ -101,7 +102,7 @@ export function KanbanBoard({ projectId }: { projectId: string }) {
   // refetch (drag, status change, duration edit) uses the slim top bar below
   // instead, so the board never unmounts/blinks.
   if (loading)
-    return <div className="p-8 text-muted-foreground">Loading board…</div>;
+    return <LoadingState label="board" />;
   if (error) return <div className="p-8 text-destructive">Error: {error}</div>;
 
   return (

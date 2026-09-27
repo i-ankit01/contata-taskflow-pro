@@ -6,6 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { DependencyGraph } from "@/components/graph/DependencyGraph";
 import { Task, Dependency, ApiResponse } from "@/types";
 import { Button } from "@/components/ui/button";
+import { LoadingState } from "@/components/ui/loading-state";
 
 export default function DashboardPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = use(params);
@@ -56,7 +57,7 @@ export default function DashboardPage({ params }: { params: Promise<{ projectId:
         </div>
       </div>
       {loading ? (
-        <div className="text-sm text-muted-foreground p-8">Loading graph…</div>
+        <LoadingState label="graph" />
       ) : (
         <DependencyGraph tasks={tasks} dependencies={dependencies} />
       )}

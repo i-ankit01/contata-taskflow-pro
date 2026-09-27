@@ -8,12 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useProjects } from "@/hooks/useProjects";
 import { CreateProjectDialog } from "./CreateProjectDialog";
+import { LoadingState } from "@/components/ui/loading-state";
 
 export function ProjectsList() {
   const { projects, loading, error, createProject } = useProjects();
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  if (loading) return <div className="p-8 text-muted-foreground">Loading projects…</div>;
+  if (loading) return <LoadingState label="projects" />;
   if (error) return <div className="p-8 text-destructive">Error: {error}</div>;
 
   return (
