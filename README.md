@@ -1,275 +1,481 @@
 # TaskFlow Pro
 
-A dependency aware Kanban workflow tool. Unlike a standard Kanban board, tasks
-here can depend on other tasks. A task cannot be marked Ready until every
-task it depends on is Done. The backend maintains a directed acyclic graph
-(DAG) of tasks and dependencies and is the single source of truth for
-whether a dependency is valid, whether a task is Ready or Blocked, and how
-schedule delays propagate downstream without compounding.
+> A dependency-aware Kanban workflow tool for managing tasks, dependencies, and schedule propagation.
 
-An LLM (OpenAI) is used only to suggest missing dependencies. It never
-writes to the database. Every suggestion passes through the same cycle
-validation as a manually created dependency and must be explicitly accepted
-by a human before it is persisted.
+Unlike a standard Kanban board, tasks in TaskFlow Pro can depend on other tasks. A task is **Ready** only when every task it depends on is **Done**.
 
-This document is the entry point for evaluators. It covers setup, features,
-architecture summary, and how to verify each requirement in the problem
-statement. Deeper detail lives in docs/architecture.md,
-docs/ai usage.md, and docs/testing.md.
+The backend maintains a **directed acyclic graph (DAG)** of tasks and dependencies and acts as the single source of truth for:
 
-## Table of contents
+* Dependency validity
+* Task readiness
+* Schedule propagation
+* Downstream delay calculation without compounding
 
-1. Tech stack
-2. Project structure
-3. Setup and running locally
-4. Environment variables
-5. Core features
-6. How to verify the dependency engine (evaluator checklist)
-7. Security notes
-8. Deployment notes
-9. Known limitations
-10. Links to further documentation
+An LLM (OpenAI) is used only to **suggest missing dependencies**. It never writes directly to the database. Every suggestion goes through the same cycle validation as a manually created dependency and requires explicit human approval before persistence.
 
-## 1. Tech stack
+Detailed documentation is available in the [Architecture](docs/architecture.md), [AI Usage](docs/ai-usage.md), and [Testing](docs/testing.md) documents.
 
-* Next.js (App Router) with TypeScript
-* Tailwind CSS and shadcn/ui components
-* Prisma ORM against PostgreSQL, hosted on Neon (cloud, serverless Postgres)
-* dnd kit for drag and drop
-* React Flow for the dependency graph visualization
-* OpenAI (gpt 4o mini) for dependency suggestions, called only from a server
-  route
-* Vitest for unit and integration tests
-* Zod for request validation on every API route
+---
 
-No Redis, Kafka, background workers, or additional services are used. This
-is a single deployable Next.js application backed by one PostgreSQL
-database, by design (see docs/architecture.md for the reasoning).
+## Table of Contents
 
-## 2. Project structure
+1. [Tech Stack](#1-tech-stack)
+2. [Project Structure](#2-project-structure)
+3. [Setup and Running Locally](#3-setup-and-running-locally)
+4. [Environment Variables](#4-environment-variables)
+5. [Core Features](#5-core-features)
+6. [Dependency Engine — Evaluator Checklist](#6-dependency-engine--evaluator-checklist)
+7. [Security](#7-security)
+8. [Deployment](#8-deployment)
+9. [Known Limitations](#9-known-limitations)
+10. [Further Documentation](#10-further-documentation)
 
+---
+
+## 1. Tech Stack
+
+| Technology        | Purpose                        |
+| ----------------- | ------------------------------ |
+| Next.js           | App Router + TypeScript        |
+| Tailwind CSS      | Styling                        |
+| shadcn/ui         | UI components                  |
+| Prisma            | ORM                            |
+| PostgreSQL / Neon | Database                       |
+| dnd-kit           | Kanban drag and drop           |
+| React Flow        | Dependency graph visualization |
+| OpenAI            | Dependency suggestions         |
+| Zod               | API request validation         |
+| Vitest            | Automated testing              |
+
+The project intentionally uses a simple architecture:
+
+```text
+One Next.js application
+        ↓
+   PostgreSQL database
+```
+
+No Redis, Kafka, background workers, or additional infrastructure is required.
+
+See [Architecture](docs/architecture.md) for the reasoning behind this design.
+
+---
+
+## 2. Project Structure
+
+```text
 taskflow-pro/
-  prisma/
-    schema.prisma          Data model: Project, Task, Dependency
-    seed.ts                 Seeds one sample project with 10 tasks and 12 dependencies
-  
-    app/
-      page.tsx                       Projects list (landing page)
-      projects/[projectId]/
-        page.tsx                     Kanban board for one project
-        dashboard/page.tsx           Dependency graph and critical path view
-      api/
-        projects/route.ts            List and create projects
-        projects/[projectId]/
-          tasks/route.ts             List and create tasks
-          tasks/[id]/route.ts        Update a task (status, duration)
-          dependencies/route.ts      List and create dependencies
-          dependencies/[id]/route.ts Delete a dependency
-          ai/suggestions/route.ts    Generate AI dependency suggestions
-    components/
-      kanban/                        Board, columns, task cards
-      tasks/                         Add and edit task dialogs
-      dependencies/                  Add dependency dialog
-      ai/                            AI suggestions panel
-      graph/                         React Flow dependency graph
-      projects/                      Projects list and creation dialog
-    hooks/                           Client data hooks (useTasks, useDependencies, useProjects)
-    lib/
-      graph/                         Pure dependency engine, framework agnostic
-      services/                      Prisma backed services that call into lib/graph
-      validations/                   Zod schemas per resource
-      api response.ts                Consistent { success, data } / { success, error } shape
-    types/                           Shared frontend types
-  docs/
-    architecture.md
-    ai usage.md
-    testing.md
-  README.md
+├── prisma/
+│   ├── schema.prisma
+│   └── seed.ts
+│
+├── app/
+│   ├── page.tsx
+│   ├── projects/
+│   │   └── [projectId]/
+│   │       ├── page.tsx
+│   │       └── dashboard/
+│   │           └── page.tsx
+│   │
+│   └── api/
+│       ├── projects/
+│       │   └── route.ts
+│       └── ...
+│
+├── components/
+│   ├── kanban/
+│   ├── tasks/
+│   ├── dependencies/
+│   ├── ai/
+│   ├── graph/
+│   └── projects/
+│
+├── hooks/
+├── lib/
+│   ├── graph/          # Pure dependency engine
+│   ├── services/       # Prisma-backed services
+│   ├── validations/    # Zod schemas
+│   └── api-response.ts # Consistent API response shape
+│
+├── types/
+│
+├── docs/
+│   ├── architecture.md
+│   ├── ai-usage.md
+│   └── testing.md
+│
+└── README.md
+```
 
-## 3. Setup and running locally
+The dependency engine in `lib/graph/` is framework-agnostic and has no imports from Prisma, Next.js, or UI code.
 
-Requirements: Node.js 18 or newer, a free Neon PostgreSQL project, an
-OpenAI API key.
+---
 
-git clone <your repo url>
+## 3. Setup and Running Locally
+
+### Requirements
+
+* Node.js 18+
+* A PostgreSQL database
+* A Neon PostgreSQL project
+* An OpenAI API key
+
+### Installation
+
+Clone the repository and install dependencies:
+
+```bash
+git clone https://github.com/i-ankit01/contata-taskflow-pro.git
 cd taskflow-pro
 npm install
+```
 
-Create .env in the project root (see section 4 for the full list of
-variables), then run:
+Create a `.env` file in the project root using the variables in [Environment Variables](#4-environment-variables).
 
+Run the database migration:
+
+```bash
 npx prisma migrate dev --name init
+```
+
+Seed the sample project:
+
+```bash
 npx prisma db seed
+```
+
+Run the test suite:
+
+```bash
 npm run test
+```
+
+Start the development server:
+
+```bash
 npm run dev
+```
 
-Open http://localhost:3000. You will land on the projects list, which
-already contains the seeded sample project with 10 tasks and 12
-dependencies (see the seed data description in docs/architecture.md).
-Click into it to reach the Kanban board.
+Open:
 
-## 4. Environment variables
+```text
+http://localhost:3000
+```
 
-# Neon PostgreSQL. Use the pooled connection string for DATABASE_URL
-# and the direct connection string for DIRECT_URL (required by Prisma
-# migrations against Neon's connection pooler).
+The application opens on the Projects page and includes a seeded sample project containing **10 tasks and 12 dependencies**.
+
+---
+
+## 4. Environment Variables
+
+Create a `.env` file in the project root:
+
+```env
+# Neon PostgreSQL
 DATABASE_URL="postgresql://user:password@host/db?sslmode=require&pgbouncer=true"
 DIRECT_URL="postgresql://user:password@host/db?sslmode=require"
 
-# OpenAI, used only server side inside lib/services/aiService.ts.
-# Never referenced from any client component.
+# OpenAI
 OPENAI_API_KEY="sk-..."
+```
 
-No secret is ever sent to the browser. See section 7 and
-docs/ai usage.md for how the OpenAI key is scoped.
+`DATABASE_URL` uses the pooled Neon connection, while `DIRECT_URL` is used for Prisma migrations.
 
-## 5. Core features
+The OpenAI API key is used only on the server and is never exposed to client components.
 
-* Kanban board with four columns: Backlog, In Progress, Review, Done.
-  Drag and drop persists via PATCH /api/projects/[projectId]/tasks/[id].
-* Derived readiness. Every task card shows Ready, Blocked, or Completed.
-  This value is never stored. It is computed on every read from the
-  current task statuses and the dependency graph.
-* Cycle safe dependency creation. Adding a dependency runs a
-  depth first search for a back edge before anything touches the
-  database. A cyclic request is rejected with a clear toast and the
-  graph remains completely unchanged.
-* Deterministic, single pass schedule propagation. Editing a task's
-  duration recalculates its own end date, then walks every downstream task
-  exactly once in topological order. Each task's new start date is the
-  maximum end date among its direct prerequisites, never a sum across
-  converging paths. This is what prevents delays from compounding at a
-  diamond shaped convergence point.
-* Automatic cascade on regression. Moving a Done task backward to
-  Review or In Progress recomputes readiness for every downstream task
-  live, and any downstream task that was Done but whose prerequisite
-  chain is no longer fully satisfied is moved back to Review, so the
-  board never shows a Done task sitting on top of an unmet dependency.
-* Blocked tasks cannot be dropped directly into Done. The client
-  blocks the drop and shows an explanatory toast; see
-  docs/architecture.md for the note on why this same rule should also be
-  enforced server side before a production launch.
-* AI dependency suggestions. A dialog calls OpenAI, grounded in the
-  project's real task list and real existing dependencies, and returns
-  structured suggestions with a reason and a confidence score. Every
-  candidate is revalidated against real task ids and the real cycle check
-  before it ever reaches the UI. Accepting a suggestion calls the exact
-  same POST /api/projects/[projectId]/dependencies endpoint used for a
-  manual dependency. Rejecting a suggestion makes no network call at all.
-* Rate limiting. The AI suggestions endpoint is limited to 10 requests
-  per minute per client IP, enforced server side.
-* Multi project support. A projects list page lets a user create a new
-  empty project and get a dedicated board and dependency graph for it. All
-  data model, service, and API changes required to isolate one project's
-  tasks and dependencies from another's are described in
-  docs/architecture.md.
-* Dependency graph view with critical path highlighting. A separate
-  page renders the graph with React Flow, color coded by readiness and
-  status, with the critical path (longest duration chain through the DAG)
-  highlighted in red with animated edges.
+See [AI Usage](docs/ai-usage.md) for details about the AI integration and development-time AI usage.
 
-## 6. How to verify the dependency engine (evaluator checklist)
+---
 
-The pure dependency engine lives entirely in lib/graph/ and has zero
-imports from Prisma, Next.js, or any UI code. Every requirement below has
-both an automated test and a way to see it live in the browser.
+## 5. Core Features
 
-Requirement: Cycle detection, graph left untouched on rejection
-  Automated test: cycleDetection tests in lib/graph/__tests__/graph.test.ts,
-  plus the integration test in dependencyService.integration.test.ts
-  Manual check: Try to add a dependency that would close a loop, confirm
-  the toast and that nothing changed
+### Dependency-Aware Kanban
 
-Requirement: Diamond dependency, no compounding
-  Automated test: propagation test in graph.test.ts, plus
-  durationEdit.integration.test.ts against a real database
-  Manual check: Edit the duration of a shared ancestor task (for example
-  Backend API) and confirm every convergence point downstream (for
-  example API Integration) shifts by the same delay exactly once
+The board contains four workflow columns:
 
-Requirement: Multi parent MAX propagation
-  Automated test: same as above
-  Manual check: Give two prerequisites different end dates and confirm
-  the dependent's start date equals the later of the two, never their sum
+* **Backlog**
+* **In Progress**
+* **Review**
+* **Done**
 
-Requirement: Rollback, multi step
-  Automated test: readiness tests plus cascadeRegression.test.ts
-  Manual check: Move a Done task back to In Progress and confirm every
-  downstream task, including ones more than one step away, updates its
-  readiness badge and, if it was Done, moves back to Review
+Drag-and-drop status changes are persisted through the task API.
 
-Requirement: No dependency case
-  Automated test: readiness tests
-  Manual check: A task with no prerequisites always shows Ready
-  regardless of anything else on the board
+### Derived Readiness
 
-Requirement: Multiple prerequisites, all must be Done
-  Automated test: readiness tests
-  Manual check: A task with three prerequisites stays Blocked until the
-  last one flips to Done
+Readiness is **never stored in the database**.
 
-Requirement: Zero side effects on a rejected cycle
-  Automated test: dependencyService.integration.test.ts, a real database test
-  Manual check: Count dependency rows before and after a rejected cyclic
-  request
+It is computed from the current task statuses and dependency graph:
 
-Full details, including exactly which files hold which test, are in
-docs/testing.md.
+```text
+All prerequisites are DONE
+            ↓
+          READY
 
-## 7. Security notes
+Any prerequisite is not DONE
+            ↓
+         BLOCKED
+```
 
-* The OpenAI API key and both database connection strings live only in
-  .env on the server. Nothing in app/api/ returns them, and no
-  client component reads process.env for a secret value.
-* Every API route validates its input with Zod before it reaches Prisma.
-  Malformed requests return a 400 with a clear error message rather than
-  reaching the database layer at all.
-* Dependency creation validates that both tasks belong to the same
-  project before running the cycle check, preventing a dependency from
-  being created across two unrelated projects.
-* AI suggestions are defensively revalidated after the model responds:
-  every candidate's task ids are checked against the real task list, self
-  references and duplicate or already existing edges are dropped, and each
-  surviving candidate is run through the same pure cycle check used for a
-  manual dependency, before the suggestion is ever shown to the user. A
-  hallucinated or unsafe suggestion cannot reach the UI, let alone the
-  database.
-* The AI endpoint is rate limited server side to reduce abuse and control
-  OpenAI cost exposure once deployed publicly.
+Completed tasks are displayed as **Completed** rather than Ready.
 
-## 8. Deployment notes
+### Cycle-Safe Dependency Creation
 
-The application is a single Next.js app and deploys cleanly to any
-platform that supports Next.js (for example Vercel) with the environment
-variables listed in section 4 configured in that platform's dashboard.
-The database is already cloud hosted on Neon, so no additional
-infrastructure is required beyond the Next.js deployment itself.
+Before creating a dependency, the graph engine checks whether the new edge would introduce a cycle.
 
-One item worth flagging for a real production launch, not just this
-prototype: the rate limiter described in section 5 is in memory and scoped
-to a single running process. That is correct for one Next.js instance,
-which is what this project intentionally uses, but it would need to move
-to a shared store such as Upstash Redis if the app were ever horizontally
-scaled across multiple instances. This tradeoff and its reasoning are
-documented in docs/architecture.md.
+If a cycle would be created:
 
-## 9. Known limitations
+* The request is rejected.
+* No dependency is persisted.
+* The existing graph remains unchanged.
 
-* The client blocks dragging a Blocked task into Done, but this is
-  currently a client side guard only. A direct API request could still
-  set a Blocked task to Done. Adding the same check inside
-  taskService.updateTask, returning a 409 the same way the cycle check
-  does, would close this gap and is a natural next step.
-* The rate limiter is per process and in memory, as noted above.
-* React Flow's dependency graph view is read only. Editing a dependency
-  from that view directly (rather than from the Add Dependency dialog) is
-  not implemented.
+### Deterministic Schedule Propagation
 
-## 10. Further documentation
+When a task's duration changes, its schedule is recalculated and downstream tasks are propagated in **topological order**.
 
-* docs/architecture.md, the full system design, data model, and the
-  reasoning behind every algorithmic choice in the dependency engine.
-* docs/ai usage.md, disclosure of how AI was used both to build this
-  project and inside the shipped product itself.
-* docs/testing.md, the complete test suite, what each test proves, and
-  how to run it.
+For a task with multiple prerequisites:
+
+```text
+startDate = MAX(prerequisite endDates)
+endDate   = startDate + duration
+```
+
+This prevents delays from compounding at converging paths.
+
+For example:
+
+```text
+       B
+      / \
+     /   \
+    A     D
+     \   /
+      \ /
+       C
+```
+
+A three-day delay to `A` shifts the downstream schedule by three days rather than adding the delay multiple times at the convergence point.
+
+### Automatic Regression Handling
+
+When a completed task is moved back to an incomplete state, readiness is recomputed for its downstream tasks.
+
+Any downstream task whose prerequisite chain is no longer fully satisfied is updated according to the project's regression rules.
+
+See [Architecture](docs/architecture.md) for the detailed behavior.
+
+### Blocked Tasks Cannot Be Dropped Into Done
+
+The client prevents a Blocked task from being dragged directly into the Done column and displays an explanatory message.
+
+The corresponding server-side validation is documented as a production hardening step in [Architecture](docs/architecture.md).
+
+### AI Dependency Suggestions
+
+OpenAI receives the project's current task list and dependency graph and suggests **missing direct dependencies**.
+
+AI suggestions:
+
+* Use real task IDs.
+* Cannot create dependencies directly.
+* Cannot suggest self-dependencies.
+* Cannot suggest existing dependencies.
+* Cannot suggest transitive or redundant dependencies.
+* Cannot introduce cycles.
+
+Every suggestion is revalidated against the real task data and graph before being displayed.
+
+The user must explicitly **Accept** a suggestion.
+
+Accepted suggestions are sent through the same dependency API used for manually created dependencies.
+
+Rejecting a suggestion makes no network request.
+
+### Rate Limiting
+
+The AI suggestions endpoint is limited to **10 requests per minute per client IP** using a server-side in-memory rate limiter.
+
+### Multi-Project Support
+
+Users can:
+
+1. View existing projects.
+2. Create a new project.
+3. Open a project-specific Kanban board.
+4. Manage tasks and dependencies independently.
+
+Tasks and dependencies are isolated by project.
+
+### Dependency Graph
+
+A dedicated graph view uses React Flow to visualize:
+
+* Dependency relationships
+* Task status
+* Task readiness
+* Critical path
+
+The critical path is highlighted visually within the DAG.
+
+---
+
+## 6. Dependency Engine — Evaluator Checklist
+
+The pure dependency engine lives entirely in `lib/graph/` and has zero imports from Prisma, Next.js, or UI code.
+
+Every major requirement has both automated and manual verification.
+
+| Requirement                         | Automated Verification              | Manual Verification                                        |
+| ----------------------------------- | ----------------------------------- | ---------------------------------------------------------- |
+| Cycle detection                     | Cycle detection tests               | Try to create a dependency that closes a loop              |
+| No side effects on rejected cycle   | Dependency service integration test | Confirm dependency count remains unchanged                 |
+| Diamond dependency / no compounding | Propagation test                    | Delay a shared ancestor and inspect downstream dates       |
+| Multi-parent MAX propagation        | Propagation test                    | Give prerequisites different end dates                     |
+| Multi-step rollback                 | Readiness + regression tests        | Move a Done task backward and inspect downstream readiness |
+| No dependency                       | Readiness tests                     | Task without prerequisites shows Ready                     |
+| Multiple prerequisites              | Readiness tests                     | Task remains Blocked until all prerequisites are Done      |
+| Zero side effects                   | Dependency service integration test | Compare dependency rows before and after rejection         |
+
+### Cycle Detection
+
+**Automated:**
+`lib/graph/__tests__/graph.test.ts` and `dependencyService.integration.test.ts`
+
+**Manual:**
+Attempt to add a dependency that would close an existing loop.
+
+Expected result:
+
+```text
+Request rejected
+      ↓
+Graph unchanged
+      ↓
+No dependency row added
+```
+
+### Diamond Dependency
+
+**Automated:**
+Propagation test and `durationEdit.integration.test.ts`
+
+**Manual:**
+Edit the duration of a shared ancestor such as `Backend API` and verify that downstream convergence points shift by the same delay exactly once.
+
+### Multi-Parent MAX Propagation
+
+**Manual:**
+Give two prerequisites different end dates and verify:
+
+```text
+Dependent start date = later prerequisite end date
+```
+
+The dates must not be summed.
+
+### Rollback
+
+**Automated:**
+Readiness tests and `cascadeRegression.test.ts`
+
+**Manual:**
+Move a Done task back to In Progress and verify that downstream tasks update their readiness correctly.
+
+### No Dependencies
+
+A task with no prerequisites should always be Ready.
+
+### Multiple Prerequisites
+
+A task with multiple prerequisites remains Blocked until **all** prerequisites are Done.
+
+For the complete test suite, see [Testing](docs/testing.md).
+
+---
+
+## 7. Security
+
+* Secrets are stored in environment variables and are not committed to the repository.
+* The OpenAI API key is server-side only.
+* API inputs are validated with Zod before reaching Prisma.
+* Malformed requests are rejected before database operations.
+* Dependency creation verifies that both tasks belong to the same project.
+* AI responses are revalidated against the real task and dependency data.
+* Invalid task IDs, self-dependencies, duplicate dependencies, existing dependencies, and cyclic edges are rejected before persistence.
+* AI suggestions require explicit human approval before database persistence.
+* The AI endpoint is rate limited to reduce abuse and unnecessary OpenAI costs.
+
+---
+
+## 8. Deployment
+
+TaskFlow Pro is designed as a single Next.js deployment backed by PostgreSQL.
+
+```text
+User
+  │
+  ▼
+Next.js Application
+  │
+  ▼
+Prisma
+  │
+  ▼
+Neon PostgreSQL
+```
+
+The application can be deployed to a Next.js-compatible platform such as Vercel.
+
+Required environment variables should be configured in the deployment platform rather than committed to the repository.
+
+### Scaling Considerations
+
+The current implementation intentionally avoids additional infrastructure.
+
+For a larger production deployment, possible next steps include:
+
+* PostgreSQL indexing and connection pooling
+* Horizontal scaling of stateless application instances
+* Shared/distributed rate limiting
+* Background processing for expensive AI workloads
+* Caching for frequently accessed project data
+
+These are future scaling options and are **not required by the current prototype**.
+
+The current rate limiter is process-local. If the application is horizontally scaled, a shared store such as Redis would be required for consistent rate limiting across instances.
+
+---
+
+## 9. Known Limitations
+
+* The client blocks dragging a Blocked task into Done, but this is currently a client-side guard. A direct API request could still set a Blocked task to Done. Server-side enforcement is a planned production hardening step.
+* The rate limiter is currently process-local and stored in memory.
+* The React Flow dependency graph is read-only. Dependency editing is performed through the Add Dependency dialog.
+* Authentication, team permissions, and collaborative multi-user editing are outside the current scope.
+
+---
+
+## 10. Further Documentation
+
+* **[Architecture](docs/architecture.md)**
+  System design, data model, graph algorithms, schedule propagation, and architectural decisions.
+
+* **[AI Usage](docs/ai-usage.md)**
+  How AI is used inside TaskFlow Pro and how AI tools were used during development.
+
+* **[Testing](docs/testing.md)**
+  Test cases, test commands, and what each test verifies.
+
+---
+
+## Evaluation Highlights
+
+TaskFlow Pro directly addresses the core technical challenges of dependency-aware workflow management:
+
+* **DAG validation** prevents circular dependencies.
+* **Derived readiness** prevents stale Ready/Blocked state.
+* **Topological propagation** provides deterministic schedule updates.
+* **MAX-based multi-parent scheduling** prevents diamond-path delay compounding.
+* **AI suggestions remain human-controlled** and pass deterministic validation.
+* **Pure graph logic** is separated from the database and UI layers.
+* **Automated tests** cover the critical dependency and propagation scenarios.
+* **Multi-project isolation** keeps project data independent.

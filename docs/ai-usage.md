@@ -1,130 +1,351 @@
-# AI and LLM usage
+# AI and LLM Usage
 
-This document covers two distinct things, and keeps them clearly
-separated: the AI feature built into the product itself, and the use of
-AI coding tools during development of this project.
+TaskFlow Pro uses AI in two distinct ways:
 
-## Table of contents
+1. **AI inside the product** — suggesting missing task dependencies.
+2. **AI-assisted development** — Claude was used as a coding assistant during implementation.
 
-1. The AI feature in the product
-2. Prompt design and grounding
-3. Safety and validation of AI output
-4. Rate limiting and cost control
-5. Why the AI can never write to the database
-6. Disclosure of AI assisted development
+These two uses are intentionally kept separate and are described independently below.
 
-## 1. The AI feature in the product
+---
 
-TaskFlow Pro uses OpenAI's gpt 4o mini model, called from
-lib/services/aiService.ts, to suggest dependencies that appear to be
-missing from a project's current task graph. This is the only place in
-the codebase an LLM is called, and it is called exclusively from a server
-route, POST /api/projects/[projectId]/ai/suggestions, never from the
-client.
+## Table of Contents
 
-The feature is presented in the UI as an AI Suggestions dialog. A user
-clicks Suggest Dependencies, the server route generates suggestions, and
-each one is shown as a card with the proposed edge (in the form of task
-titles, not raw ids), the model's stated reason, and a confidence
-percentage, with Accept and Reject buttons.
+1. [The AI Feature in the Product](#1-the-ai-feature-in-the-product)
+2. [Prompt Design and Grounding](#2-prompt-design-and-grounding)
+3. [Safety and Validation of AI Output](#3-safety-and-validation-of-ai-output)
+4. [Rate Limiting and Cost Control](#4-rate-limiting-and-cost-control)
+5. [Why AI Cannot Write to the Database](#5-why-ai-cannot-write-to-the-database)
+6. [Disclosure of AI-Assisted Development](#6-disclosure-of-ai-assisted-development)
 
-## 2. Prompt design and grounding
+---
 
-The prompt sent to the model is built from the project's actual data,
-never from invented or placeholder content. Specifically, every task's
-real id, title, and description, and every existing dependency edge
-(as real id pairs), are serialized into the user message. The system
-prompt instructs the model explicitly to use only exact ids from the
-provided task list, never a title in place of an id, never to invent an
-id, never to suggest an edge that already exists, never to suggest a task
-depending on itself, never to suggest an edge that would create a cycle,
-and to return an empty list rather than a forced suggestion if nothing is
-genuinely missing.
+## 1. The AI Feature in the Product
 
-The response is requested as strict structured JSON via OpenAI's
-json_schema response format, with a schema that requires exactly the
-fields the product needs: taskId, dependsOnTaskId, reason, and a
-numeric confidence. This removes an entire class of parsing failures
-that free form text output would introduce.
+TaskFlow Pro uses **OpenAI's `gpt-4o-mini`** to suggest dependencies that may be missing from a project's task graph.
 
-If the graph genuinely has no missing dependencies worth suggesting, the
-UI shows "Graph is complete. No additional dependency suggestions
-required." rather than fabricating a suggestion to have something to
-display. This is enforced both by the system prompt's explicit
-instruction and, more importantly, by the fact that every candidate the
-model does return is independently reverified as described in the next
-section, so even if the model were to hallucinate a suggestion under
-pressure to produce output, that suggestion would be filtered out before
-ever reaching the person using the product.
+The model is called from:
 
-## 3. Safety and validation of AI output
+```text
+lib/services/aiService.ts
+```
 
-The model's raw output is never trusted on its own. After parsing and Zod
-validating the response shape, every individual suggestion is checked
-against the real current state of the project before it is returned to
-the client:
+and is accessed exclusively through the server-side endpoint:
 
-* Both taskId and dependsOnTaskId must be real ids belonging to a task
-  in this project. A hallucinated id is dropped silently.
-* A suggestion where a task depends on itself is dropped.
-* A suggestion that duplicates an edge that already exists in the
-  database is dropped.
-* A duplicate suggestion within the same response (the model suggesting
-  the same edge twice) is dropped.
-* The suggestion is run through wouldCreateCycle, the exact same pure
-  function from lib/graph/cycleDetection.ts used for a manually
-  created dependency. A suggestion that would create a cycle is dropped.
+```text
+POST /api/projects/[projectId]/ai/suggestions
+```
 
-Only suggestions that survive every one of these checks are ever shown to
-the user. This means the AI's role is strictly advisory. It can propose,
-but every proposal is independently confirmed safe using the same logic
-that governs manual dependency creation, before a human ever sees it, and
-again when a human accepts it.
+The client never calls OpenAI directly.
 
-## 4. Rate limiting and cost control
+### User Flow
 
-The suggestions endpoint enforces a limit of 10 requests per minute per
-client IP address, implemented server side in
-lib/services/rateLimiter.ts. A request beyond that limit receives a
-429 response with a clear message stating how long to wait. This protects
-both against runaway OpenAI API cost and against a single client
-overwhelming the endpoint. See docs/architecture.md section 9 for the
-scaling tradeoff this simple approach makes.
+```text
+User
+  │
+  ▼
+AI Suggestions Dialog
+  │
+  ▼
+Server API Route
+  │
+  ▼
+OpenAI
+  │
+  ▼
+Validation
+  │
+  ▼
+Suggestion Cards
+  │
+  ├── Accept → Existing Dependency API
+  │
+  └── Reject → Local UI only
+```
 
-## 5. Why the AI can never write to the database
+Each suggestion is displayed as a card containing:
 
-This is enforced structurally, not just by convention. generateDependencySuggestions
-only ever reads from the database (db.task.findMany,
-db.dependency.findMany) and returns a plain array. It has no reference
-to db.dependency.create anywhere in its implementation. The only path
-that writes a suggested dependency to the database is the user clicking
-Accept, which calls useDependencies().createDependency, the exact same
-client hook and the exact same POST /api/projects/[projectId]/dependencies
-endpoint used by the manual Add Dependency dialog. There is no
-alternate, AI only endpoint or write path anywhere in the codebase.
-Rejecting a suggestion makes no network request at all; it only filters
-the suggestion out of local client state.
+* Proposed dependency using task titles
+* Model-generated reason
+* Confidence percentage
+* **Accept** button
+* **Reject** button
 
-## 6. Disclosure of AI assisted development
+The AI therefore acts as an advisory layer rather than an autonomous workflow executor.
 
-This project was built with the assistance of an AI coding assistant
-(Claude) used interactively throughout development, phase by phase,
-following the build order: scaffolding and schema, the pure dependency
-engine and its test suite, the API layer, the Kanban UI, the AI
-suggestions feature itself, the dependency graph visualization, and
-finally multi project support. Each phase's code was generated by the
-assistant based on a detailed specification, then reviewed, run, and
-verified by the developer before moving to the next phase. Several bugs
-surfaced during this review process and were fixed with further AI
-assistance, including a hooks ordering issue in the Kanban board
-component, a cascading regression gap where a Done task could remain
-Done after its prerequisites regressed, and a TypeScript type mismatch in
-a shadcn Select component.
+---
 
-This disclosure is included in the interest of transparency about how the
-codebase was produced, consistent with responsible use of AI development
-tools: the assistant was used as an implementation aid under continuous
-human direction and review, not as an unsupervised code generator, and
-every piece of core logic, in particular everything in
-lib/graph/, is backed by a unit or integration test that the
-developer ran and confirmed passing before relying on it.
+## 2. Prompt Design and Grounding
+
+The model receives the project's **real current data** rather than invented or placeholder information.
+
+The prompt contains:
+
+* Every task's real ID
+* Task title
+* Task description
+* Every existing dependency as a real task-ID pair
+
+The system prompt instructs the model to:
+
+* Use only exact task IDs from the provided task list.
+* Never use a title in place of an ID.
+* Never invent an ID.
+* Never suggest an existing dependency.
+* Never suggest a self-dependency.
+* Never suggest a dependency that would create a cycle.
+* Never suggest indirect, transitive, or redundant dependencies.
+* Return an empty list when no genuinely missing dependency exists.
+* Avoid forcing a suggestion simply because the model is expected to produce output.
+
+### Structured Output
+
+The response is requested using OpenAI's structured JSON response format.
+
+The schema contains exactly the fields required by the product:
+
+```json
+{
+  "taskId": "string",
+  "dependsOnTaskId": "string",
+  "reason": "string",
+  "confidence": 0.0
+}
+```
+
+This avoids relying on free-form text parsing and makes the model response easier to validate deterministically.
+
+### Complete Graph Handling
+
+If the graph already contains all meaningful direct dependencies, the system does not force the model to invent another one.
+
+The UI displays:
+
+```text
+Graph is complete. No additional dependency suggestions required.
+```
+
+This behavior is reinforced at two levels:
+
+1. The prompt explicitly tells the model to return an empty list when appropriate.
+2. Every returned suggestion is independently validated before reaching the user.
+
+---
+
+## 3. Safety and Validation of AI Output
+
+The model's output is **never trusted on its own**.
+
+After parsing and Zod validation, every suggestion is checked against the project's current database state.
+
+### Validation Pipeline
+
+```text
+OpenAI Response
+      │
+      ▼
+Structured Response Validation
+      │
+      ▼
+Real Task ID Validation
+      │
+      ▼
+Self-Dependency Check
+      │
+      ▼
+Existing Dependency Check
+      │
+      ▼
+Duplicate Suggestion Check
+      │
+      ▼
+Cycle Detection
+      │
+      ▼
+Safe Suggestion
+```
+
+A candidate is discarded if:
+
+| Check          | Invalid candidate                           |
+| -------------- | ------------------------------------------- |
+| Task IDs       | ID does not belong to a task in the project |
+| Self-reference | `taskId === dependsOnTaskId`                |
+| Existing edge  | Dependency already exists                   |
+| Duplicate      | Same suggestion appears twice               |
+| Cycle          | New edge would create a cycle               |
+
+The cycle check uses the same pure graph function used by manual dependency creation:
+
+```text
+lib/graph/cycleDetection.ts
+```
+
+Specifically:
+
+```text
+wouldCreateCycle(...)
+```
+
+This is important because AI-generated dependencies do not receive a separate or weaker validation path.
+
+Only suggestions that survive every check are shown to the user.
+
+When a user accepts a suggestion, the dependency is **validated again** through the normal dependency API.
+
+Therefore:
+
+```text
+AI Suggestion
+      ↓
+Validation
+      ↓
+Human Approval
+      ↓
+Normal Dependency API
+      ↓
+Cycle Validation
+      ↓
+Database
+```
+
+The AI can propose a dependency, but it cannot bypass the application's deterministic validation rules.
+
+---
+
+## 4. Rate Limiting and Cost Control
+
+The AI suggestions endpoint is limited to:
+
+```text
+10 requests per minute per client IP
+```
+
+The limiter is implemented server-side in:
+
+```text
+lib/services/rateLimiter.ts
+```
+
+Requests beyond the limit receive:
+
+```text
+HTTP 429
+```
+
+with a message indicating how long the client should wait.
+
+This provides two benefits:
+
+* Reduces abuse of the AI endpoint.
+* Limits unnecessary OpenAI API usage and associated cost.
+
+The current limiter is intentionally in-memory and process-local. See [Architecture — Rate Limiting](architecture.md#9-rate-limiting) for the scaling tradeoff.
+
+---
+
+## 5. Why AI Cannot Write to the Database
+
+This restriction is enforced **structurally**, not only through a prompt or convention.
+
+The AI suggestion service only reads project data:
+
+```text
+db.task.findMany(...)
+db.dependency.findMany(...)
+```
+
+and returns a plain array of suggestions.
+
+It has no database write operation for dependencies.
+
+In particular, the AI service does not contain:
+
+```text
+db.dependency.create(...)
+```
+
+### Only the Normal Dependency API Can Persist a Suggestion
+
+The only path that writes an accepted AI suggestion is the same path used for manually created dependencies:
+
+```text
+User clicks Accept
+       ↓
+useDependencies().createDependency()
+       ↓
+POST /api/projects/[projectId]/dependencies
+       ↓
+Dependency validation
+       ↓
+Database
+```
+
+There is no separate AI-only database write endpoint.
+
+### Rejecting a Suggestion
+
+Rejecting a suggestion does not call the server.
+
+The suggestion is simply removed from the local client state.
+
+```text
+Reject
+  ↓
+Local UI state
+  ↓
+No API request
+  ↓
+No database change
+```
+
+This keeps the AI feature human-controlled and prevents the model from directly modifying project state.
+
+---
+
+## 6. Disclosure of AI-Assisted Development
+
+TaskFlow Pro was developed with assistance from **Claude**, used interactively throughout the implementation process.
+
+Claude was used phase by phase for areas including:
+
+* Initial project scaffolding
+* Database schema
+* Pure dependency engine
+* Automated tests
+* API layer
+* Kanban UI
+* AI dependency suggestions
+* Dependency graph visualization
+* Multi-project support
+* Debugging and documentation
+
+The development process was iterative rather than fully autonomous.
+
+A typical workflow was:
+
+```text
+Specification
+      ↓
+AI-assisted implementation
+      ↓
+Developer review
+      ↓
+Run application/tests
+      ↓
+Identify issues
+      ↓
+Fix and re-test
+```
+
+Several implementation issues were identified during this process and corrected with further AI assistance, including:
+
+* A hooks ordering issue in the Kanban board.
+* A cascading regression case where a completed task could remain `DONE` after its prerequisite regressed.
+* A TypeScript type mismatch involving a shadcn/ui `Select` component.
+
+The core dependency engine was independently tested using unit and integration tests before being relied upon by the application.
+
+The AI coding assistant therefore acted as an **implementation aid under continuous human direction and review**, rather than as an unsupervised code generator.
+
+This disclosure is included to make the development process transparent and distinguish AI-assisted implementation from the AI functionality that is actually shipped as part of TaskFlow Pro.
